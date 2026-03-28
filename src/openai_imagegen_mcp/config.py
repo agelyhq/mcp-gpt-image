@@ -27,18 +27,9 @@ class Settings(BaseSettings):
 
     port: int = 8000
 
-    google_oauth_client_id: str | None = None
-    google_oauth_client_secret: str | None = None
-
     @property
     def output_dir(self) -> Path:
-        path = Path(self.openai_imagegen_output_dir)
-        path.mkdir(parents=True, exist_ok=True)
-        return path
-
-    @property
-    def has_google_oauth(self) -> bool:
-        return bool(self.google_oauth_client_id and self.google_oauth_client_secret)
+        return Path(self.openai_imagegen_output_dir)
 
 
 @lru_cache
