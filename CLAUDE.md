@@ -8,8 +8,8 @@ MCP server exposing OpenAI's Image API (gpt-image-1.5) as two tools: `generate_i
 
 Clean Architecture with 3 layers:
 
-- **Domain**: `openai_client.py` — async wrapper around OpenAI SDK (runs sync calls in `asyncio.to_thread()`)
-- **Use Cases**: `tools/generate.py`, `tools/edit.py` — validation + error handling + delegation to client
+- **Domain**: `openai_client.py` — async wrapper around OpenAI SDK (runs sync calls in `asyncio.to_thread()`), defines domain exceptions (`ImageClientError`, `ImageRateLimitError`)
+- **Use Cases**: `tools/generate.py`, `tools/edit.py` — error handling + delegation to client; `tools/_validators.py` — shared parameter validation
 - **Framework**: `server.py` (FastMCP wiring), `__main__.py` (CLI), root-level `fastmcp_server.py` (cloud entrypoint)
 
 Config via `pydantic-settings` in `config.py`, reads from `.env`.
@@ -17,10 +17,10 @@ Config via `pydantic-settings` in `config.py`, reads from `.env`.
 ## Key Conventions
 
 - **File paths as interface**: Tools return `{path, revised_prompt}`, never binary. Images saved to `output_dir` with timestamped filenames.
-- **Filename format**: `{YYYYMMDD_HHMMSS}_{prompt_slug}_{n}.{format}`
 - **Dual transport**: stdio (default, local) and streamable-http (cloud). Same server instance.
 - **No `response_format` param**: gpt-image-1.5 returns b64_json via `output_format` parameter directly. The older `response_format` param causes 400 errors.
-- **Error handling**: `BadRequestError` and `RateLimitError` caught in tool layer, returned as `{error: ...}` — no crashes.
+- **Filename format**: `{YYYYMMDD_HHMMSS_ffffff}_{prompt_slug}_{n}.{format}` — microsecond precision prevents collisions under concurrency.
+- **Error handling**: Domain exceptions (`ImageClientError`, `ImageRateLimitError`) and `ValueError` caught in tool layer, returned as `{error: ...}` — no crashes.
 
 ## Commands
 
@@ -41,4 +41,4 @@ make run       # Start stdio server
 
 ## Testing
 
-E2E only — tests go through FastMCP Client → Server → OpenAI API → disk. No mocks. Requires valid `OPENAI_API_KEY` in `.env`.
+E2E-style tests go through FastMCP Client → Server → mocked OpenAI SDK → disk. The OpenAI client is patched with `unittest.mock` in `conftest.py` to avoid real API calls in CI. Tests validate the full MCP tool lifecycle and file output.

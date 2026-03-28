@@ -44,8 +44,6 @@ make run       # Start MCP server (stdio mode)
 | `OPENAI_IMAGEGEN_DEFAULT_QUALITY` | No | `auto` | Default quality |
 | `OPENAI_IMAGEGEN_TIMEOUT` | No | `180` | API timeout in seconds |
 | `PORT` | No | `8000` | HTTP port (streamable-http mode) |
-| `GOOGLE_OAUTH_CLIENT_ID` | No | — | GCP OAuth client ID (remote mode) |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | No | — | GCP OAuth client secret (remote mode) |
 
 ## MCP Tools
 
