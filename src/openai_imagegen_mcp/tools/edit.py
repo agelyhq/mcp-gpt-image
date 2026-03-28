@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from openai import BadRequestError, RateLimitError
+from openai_imagegen_mcp.openai_client import ImageClientError, ImageRateLimitError
+from openai_imagegen_mcp.tools._validators import validate_edit_params
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -48,18 +48,18 @@ def register_edit_tool(mcp: FastMCP, client: ImageClient) -> None:
         Returns:
             List of dicts with 'path' (local file path) and 'revised_prompt'.
         """
-        _validate_edit_params(
-            image_paths,
-            mask_path,
-            size,
-            quality,
-            output_format,
-            output_compression,
-            background,
-            input_fidelity,
-        )
-
         try:
+            validate_edit_params(
+                image_paths,
+                mask_path,
+                size,
+                quality,
+                output_format,
+                output_compression,
+                background,
+                input_fidelity,
+            )
+
             return await client.edit(
                 prompt=prompt,
                 image_paths=image_paths,
@@ -72,54 +72,9 @@ def register_edit_tool(mcp: FastMCP, client: ImageClient) -> None:
                 background=background,
                 input_fidelity=input_fidelity,
             )
-        except BadRequestError as exc:
-            return [{"error": f"Content policy violation or bad request: {exc.message}"}]
-        except RateLimitError as exc:
-            return [{"error": f"Rate limited: {exc.message}"}]
-
-
-def _validate_edit_params(
-    image_paths: list[str],
-    mask_path: str | None,
-    size: str,
-    quality: str,
-    output_format: str,
-    output_compression: int,
-    background: str,
-    input_fidelity: str,
-) -> None:
-    if not image_paths:
-        raise ValueError("At least one image_path is required")
-
-    if len(image_paths) > 5:
-        raise ValueError(f"Maximum 5 input images, got {len(image_paths)}")
-
-    for p in image_paths:
-        if not Path(p).is_file():
-            raise ValueError(f"Image file not found: {p}")
-
-    if mask_path and not Path(mask_path).is_file():
-        raise ValueError(f"Mask file not found: {mask_path}")
-
-    valid_sizes = {"1024x1024", "1536x1024", "1024x1536", "auto"}
-    if size not in valid_sizes:
-        raise ValueError(f"Invalid size '{size}'. Must be one of {valid_sizes}")
-
-    valid_qualities = {"low", "medium", "high", "auto"}
-    if quality not in valid_qualities:
-        raise ValueError(f"Invalid quality '{quality}'. Must be one of {valid_qualities}")
-
-    valid_formats = {"png", "jpeg", "webp"}
-    if output_format not in valid_formats:
-        raise ValueError(f"Invalid format '{output_format}'. Must be one of {valid_formats}")
-
-    if not 0 <= output_compression <= 100:
-        raise ValueError(f"output_compression must be 0-100, got {output_compression}")
-
-    valid_backgrounds = {"transparent", "opaque", "auto"}
-    if background not in valid_backgrounds:
-        raise ValueError(f"Invalid background '{background}'. Must be one of {valid_backgrounds}")
-
-    valid_fidelities = {"low", "high"}
-    if input_fidelity not in valid_fidelities:
-        raise ValueError(f"Invalid fidelity '{input_fidelity}'. Must be one of {valid_fidelities}")
+        except ValueError as exc:
+            return [{"error": str(exc)}]
+        except ImageClientError as exc:
+            return [{"error": f"Content policy violation or bad request: {exc}"}]
+        except ImageRateLimitError as exc:
+            return [{"error": f"Rate limited: {exc}"}]

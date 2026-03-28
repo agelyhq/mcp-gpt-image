@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from openai import BadRequestError, RateLimitError
+from openai_imagegen_mcp.openai_client import ImageClientError, ImageRateLimitError
+from openai_imagegen_mcp.tools._validators import validate_generate_params
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -41,9 +42,16 @@ def register_generate_tool(mcp: FastMCP, client: ImageClient) -> None:
         Returns:
             List of dicts with 'path' (local file path) and 'revised_prompt'.
         """
-        _validate_generate_params(size, quality, output_format, output_compression, background, n)
-
         try:
+            validate_generate_params(
+                size,
+                quality,
+                output_format,
+                output_compression,
+                background,
+                n,
+            )
+
             return await client.generate(
                 prompt=prompt,
                 model=model,
@@ -54,38 +62,9 @@ def register_generate_tool(mcp: FastMCP, client: ImageClient) -> None:
                 background=background,
                 n=n,
             )
-        except BadRequestError as exc:
-            return [{"error": f"Content policy violation or bad request: {exc.message}"}]
-        except RateLimitError as exc:
-            return [{"error": f"Rate limited: {exc.message}"}]
-
-
-def _validate_generate_params(
-    size: str,
-    quality: str,
-    output_format: str,
-    output_compression: int,
-    background: str,
-    n: int,
-) -> None:
-    valid_sizes = {"1024x1024", "1536x1024", "1024x1536", "auto"}
-    if size not in valid_sizes:
-        raise ValueError(f"Invalid size '{size}'. Must be one of {valid_sizes}")
-
-    valid_qualities = {"low", "medium", "high", "auto"}
-    if quality not in valid_qualities:
-        raise ValueError(f"Invalid quality '{quality}'. Must be one of {valid_qualities}")
-
-    valid_formats = {"png", "jpeg", "webp"}
-    if output_format not in valid_formats:
-        raise ValueError(f"Invalid format '{output_format}'. Must be one of {valid_formats}")
-
-    if not 0 <= output_compression <= 100:
-        raise ValueError(f"output_compression must be 0-100, got {output_compression}")
-
-    valid_backgrounds = {"transparent", "opaque", "auto"}
-    if background not in valid_backgrounds:
-        raise ValueError(f"Invalid background '{background}'. Must be one of {valid_backgrounds}")
-
-    if not 1 <= n <= 4:
-        raise ValueError(f"n must be 1-4, got {n}")
+        except ValueError as exc:
+            return [{"error": str(exc)}]
+        except ImageClientError as exc:
+            return [{"error": f"Content policy violation or bad request: {exc}"}]
+        except ImageRateLimitError as exc:
+            return [{"error": f"Rate limited: {exc}"}]
