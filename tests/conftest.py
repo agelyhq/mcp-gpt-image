@@ -9,6 +9,7 @@ from pathlib import Path  # noqa: TC003 — used at runtime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastmcp import Client
 
 from openai_imagegen_mcp.config import Settings
 from openai_imagegen_mcp.server import create_server
@@ -94,6 +95,12 @@ def clean_output_dir(output_dir: Path) -> Path:
         if f.is_file():
             f.unlink()
     return output_dir
+
+
+@pytest.fixture
+def client(mcp_server):
+    """FastMCP test client wrapping the server."""
+    return Client(mcp_server)
 
 
 @pytest.fixture

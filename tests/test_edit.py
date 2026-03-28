@@ -7,14 +7,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
-from fastmcp import Client
-
-
-@pytest.fixture
-def client(mcp_server):
-    return Client(mcp_server)
+if TYPE_CHECKING:
+    from fastmcp import Client
 
 
 async def test_edit_image(client: Client, clean_output_dir: Path, sample_image: Path):
@@ -105,17 +101,19 @@ async def test_iterative_workflow(client: Client, clean_output_dir: Path):
 
 
 async def test_edit_nonexistent_file_returns_error(client: Client, clean_output_dir: Path):
-    """Editing a nonexistent file should raise a validation error."""
-    from fastmcp.exceptions import ToolError
+    """Editing a nonexistent file should return a validation error."""
+    async with client:
+        result = await client.call_tool(
+            "edit_image",
+            {
+                "prompt": "Do something",
+                "image_paths": ["/nonexistent/fake.png"],
+                "quality": "low",
+                "size": "1024x1024",
+            },
+        )
 
-    with pytest.raises(ToolError, match="Image file not found"):
-        async with client:
-            await client.call_tool(
-                "edit_image",
-                {
-                    "prompt": "Do something",
-                    "image_paths": ["/nonexistent/fake.png"],
-                    "quality": "low",
-                    "size": "1024x1024",
-                },
-            )
+    parsed = json.loads(result.content[0].text)
+    assert len(parsed) == 1
+    assert "error" in parsed[0]
+    assert "Image file not found" in parsed[0]["error"]

@@ -7,14 +7,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import pytest
-from fastmcp import Client
-
-
-@pytest.fixture
-def client(mcp_server):
-    return Client(mcp_server)
+if TYPE_CHECKING:
+    from fastmcp import Client
 
 
 async def test_generate_single_image(client: Client, clean_output_dir: Path):
