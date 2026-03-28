@@ -10,6 +10,9 @@ RUN uv sync --frozen --no-dev
 COPY src/ src/
 COPY fastmcp_server.py .
 
+RUN useradd -r appuser && mkdir -p /data/generated-images && chown appuser /data/generated-images
+USER appuser
+
 ENV OPENAI_IMAGEGEN_OUTPUT_DIR=/data/generated-images
 EXPOSE 8000
 
