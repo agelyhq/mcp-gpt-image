@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.1 - 2026-08-14
+
+Documentation only, in the one place documentation is executable.
+
+### Fixed
+
+- **`generate_image` no longer tells the calling model about a bug that is fixed.** Its docstring
+  becomes the tool description sent to every client, and it still said the API sometimes answers a
+  webp request with PNG bytes. A live run through the MCP surface returned genuine webp, matching
+  what the rest of the documentation already said. The format is still detected from the bytes,
+  and the description now says what that is for: the result is the value to trust, whether or not
+  it matches the request.
+
 ## 0.3.0 - 2026-08-14
 
 One setting, on the model that steers `refine_image`. Nothing in the tool surface changes: the

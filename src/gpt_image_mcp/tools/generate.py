@@ -48,8 +48,8 @@ def register(mcp: FastMCP, deps: ToolDeps) -> None:
         Transparent backgrounds do not exist on this model. Use opaque or auto.
 
         The output_format field of the result describes the bytes actually written,
-        which can differ from what was asked: the API sometimes answers a webp
-        request with a PNG, and the file is named after its real content.
+        which is what the file is named after. It normally matches the request, and
+        it is the value to trust when it does not.
 
         Args:
             prompt: What to draw. Detail helps; up to 32000 characters.
