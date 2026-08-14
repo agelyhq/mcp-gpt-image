@@ -4,40 +4,33 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from openai import AsyncOpenAI, OpenAIError
+from openai import OpenAIError
 
 from gpt_image_mcp.adapters._errors import translate_sdk_error
 from gpt_image_mcp.domain.errors import ImageRequestError
 from gpt_image_mcp.domain.results import ImagePayload
+from gpt_image_mcp.domain.types import MIME_BY_SUFFIX
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from gpt_image_mcp.config import Settings
+    from openai import AsyncOpenAI
+
     from gpt_image_mcp.domain.types import Background, Moderation, OutputFormat, Quality
 
-_MIME_BY_SUFFIX = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".webp": "image/webp",
-}
-
-# Parameters gpt-image-2 rejects, kept here as documentation of what must never
-# be sent: input_fidelity (the model is always high fidelity), response_format
-# and style (both DALL-E only), and moderation on edits (absent from the schema).
+# Compression is only meaningful for lossy formats, and sending it with png is
+# rejected. Parameters gpt-image-2 refuses outright are never built at all:
+# input_fidelity (the model is always high fidelity), response_format and style
+# (both DALL-E only), and moderation on edits (absent from that schema).
 _COMPRESSIBLE_FORMATS = frozenset({"jpeg", "webp"})
 
 
 class ImagesClient:
     """Generates and edits images through /v1/images, one call per tool invocation."""
 
-    def __init__(self, settings: Settings, sdk: AsyncOpenAI | None = None) -> None:
-        self._sdk = sdk or AsyncOpenAI(
-            api_key=settings.openai_api_key,
-            timeout=settings.timeout,
-        )
-        self._model = settings.model
+    def __init__(self, sdk: AsyncOpenAI, model: str, timeout: int) -> None:
+        self._sdk = sdk.with_options(timeout=timeout)
+        self._model = model
 
     async def generate(
         self,
@@ -115,7 +108,9 @@ class ImagesClient:
 
 
 def _upload(path: Path) -> tuple[str, bytes, str]:
-    mime = _MIME_BY_SUFFIX.get(path.suffix.lower(), "application/octet-stream")
+    # Suffixes are validated upstream, so a miss here would be a defect rather
+    # than caller input; octet-stream makes the API say so instead of guessing.
+    mime = MIME_BY_SUFFIX.get(path.suffix.lower(), "application/octet-stream")
     return (path.name, path.read_bytes(), mime)
 
 
