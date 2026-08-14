@@ -1,10 +1,13 @@
 .env
+.venv/
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
+dist/
 .pytest_cache/
 .ruff_cache/
-dist/
-*.egg-info/
+.mypy_cache/
+
+# Default output directory. Generated images are artefacts, not sources.
 generated-images/
-.venv/
