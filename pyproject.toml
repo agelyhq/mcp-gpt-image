@@ -1,20 +1,56 @@
 [project]
-name = "openai-imagegen-mcp"
-version = "0.1.0"
-description = "MCP server for image generation and editing using OpenAI gpt-image-1.5"
-requires-python = ">=3.11"
+name = "mcp-gpt-image"
+version = "0.2.0"
+description = "MCP server for image generation, editing and multi-turn refinement with OpenAI gpt-image-2"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "LicenseRef-FSL-1.1-MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Fabien Vauchelles" }]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "openai",
+    "gpt-image-2",
+    "image-generation",
+    "image-editing",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
-    "fastmcp>=2.0",
-    "openai>=1.60",
-    "pydantic-settings[dotenv]>=2.0",
+    # 3.4.1 and later floor Starlette at 1.0.1, which closes CVE-2026-48710.
+    # The 4.0 line drops the 3.x compatibility shims, so it stays out until it is stable.
+    "fastmcp>=3.4.7,<4",
+    # 3.0 moved the HTTP layer to HTTPX2. Nothing here passes a custom transport,
+    # so the switch is invisible, but an older SDK predates gpt-image-2 entirely.
+    "openai>=3.0,<4",
+    "pydantic>=2.11",
+    "pydantic-settings[dotenv]>=2.6",
 ]
 
 [project.scripts]
-openai-imagegen-mcp = "openai_imagegen_mcp.__main__:main"
+mcp-gpt-image = "gpt_image_mcp.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/agelyhq/mcp-gpt-image"
+Repository = "https://github.com/agelyhq/mcp-gpt-image"
+Issues = "https://github.com/agelyhq/mcp-gpt-image/issues"
+Changelog = "https://github.com/agelyhq/mcp-gpt-image/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
+    "mypy>=1.14",
+    "pytest>=8.3",
     "pytest-asyncio>=0.24",
     "ruff>=0.9",
 ]
@@ -24,7 +60,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/openai_imagegen_mcp"]
+packages = ["src/gpt_image_mcp"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -34,8 +70,23 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 src = ["src"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH", "RUF"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "TC", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Pydantic and FastMCP read these annotations at runtime to build the tool
+# schemas, so moving the imports into a type-checking block breaks the server.
+"src/gpt_image_mcp/tools/edit.py" = ["TC001"]
+"src/gpt_image_mcp/tools/generate.py" = ["TC001"]
+"src/gpt_image_mcp/tools/refine.py" = ["TC001"]
+"src/gpt_image_mcp/domain/results.py" = ["TC001"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
