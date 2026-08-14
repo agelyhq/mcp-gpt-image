@@ -15,7 +15,7 @@ from openai import BadRequestError, NotFoundError, OpenAIError
 from gpt_image_mcp.adapters._errors import translate_sdk_error
 from gpt_image_mcp.domain.errors import ImageRequestError, RefinementSessionError
 from gpt_image_mcp.domain.results import ImagePayload, RefinementTurn
-from gpt_image_mcp.domain.types import MIME_BY_SUFFIX, SESSION_RETENTION_DAYS
+from gpt_image_mcp.domain.types import SESSION_RETENTION_DAYS, mime_for
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -105,9 +105,12 @@ def _image_tool(quality: Quality) -> dict[str, Any]:
 
 
 def _as_input_image(path: Path) -> dict[str, Any]:
-    mime = MIME_BY_SUFFIX.get(path.suffix.lower(), "image/png")
     encoded = base64.b64encode(path.read_bytes()).decode()
-    return {"type": "input_image", "image_url": f"data:{mime};base64,{encoded}", "detail": "auto"}
+    return {
+        "type": "input_image",
+        "image_url": f"data:{mime_for(path.suffix)};base64,{encoded}",
+        "detail": "auto",
+    }
 
 
 def _extract_image(response: Any) -> ImagePayload:

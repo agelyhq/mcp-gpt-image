@@ -93,6 +93,10 @@ async def test_generate_transparent_background_is_rejected_by_schema(
         # Both dimensions are multiples of 16, so only the 3.2:1 ratio is wrong.
         ("1024x320", "aspect ratio"),
         ("big", "Use 'auto'"),
+        # A zero dimension clears every bound, then divides by zero in the ratio
+        # check. It has to fail as a validation error, not as a raw crash.
+        ("0x1024", "Use 'auto'"),
+        ("1024x0", "Use 'auto'"),
     ],
 )
 async def test_generate_invalid_size_errors_without_calling_the_api(

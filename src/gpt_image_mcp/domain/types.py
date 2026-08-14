@@ -41,13 +41,24 @@ MAX_ASPECT_RATIO: Final = 3.0
 # Which files can be sent as input, and how each one is labelled on the wire.
 # One mapping rather than two: a format accepted without a mime type would be
 # uploaded as an opaque blob, which the API rejects for no visible reason.
-MIME_BY_SUFFIX: Final = {
+_MIME_BY_SUFFIX: Final = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".webp": "image/webp",
 }
-EDIT_INPUT_SUFFIXES: Final = frozenset(MIME_BY_SUFFIX)
+EDIT_INPUT_SUFFIXES: Final = frozenset(_MIME_BY_SUFFIX)
+
+
+def mime_for(suffix: str) -> str:
+    """Label a file for upload.
+
+    Suffixes are validated before anything is sent, so an unknown one is a defect
+    here rather than caller input. Saying so beats guessing a type the bytes may
+    not have.
+    """
+    return _MIME_BY_SUFFIX.get(suffix.lower(), "application/octet-stream")
+
 
 # Shown to the calling model in both tool schemas, so the rules it must satisfy
 # are stated once and cannot drift between the two.

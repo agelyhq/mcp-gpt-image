@@ -39,5 +39,9 @@ class ImageDecodeError(ImageError):
     """The API returned bytes that are not a PNG, a JPEG or a WEBP."""
 
 
+class ImageStorageError(ImageError):
+    """The image could not be written to the output directory."""
+
+
 class RefinementSessionError(ImageError):
     """The refinement session id is unknown or has expired."""

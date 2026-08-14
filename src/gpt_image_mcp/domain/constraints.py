@@ -126,7 +126,9 @@ def _resolve_image(raw: str) -> Path:
 
 def _parse_dimensions(size: str) -> tuple[int, int]:
     width, _, height = size.partition("x")
-    if not width.isdigit() or not height.isdigit():
+    # A zero dimension parses and clears the bounds checks, then divides by zero
+    # in the aspect ratio. It has to be rejected here, where the error is typed.
+    if not width.isdigit() or not height.isdigit() or not int(width) or not int(height):
         raise ImageValidationError(
             f"Invalid size '{size}'. Use 'auto', a preset, or WIDTHxHEIGHT such as '1536x864'."
         )

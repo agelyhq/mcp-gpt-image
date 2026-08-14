@@ -9,7 +9,7 @@ from openai import OpenAIError
 from gpt_image_mcp.adapters._errors import translate_sdk_error
 from gpt_image_mcp.domain.errors import ImageRequestError
 from gpt_image_mcp.domain.results import ImagePayload
-from gpt_image_mcp.domain.types import MIME_BY_SUFFIX
+from gpt_image_mcp.domain.types import mime_for
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -108,10 +108,7 @@ class ImagesClient:
 
 
 def _upload(path: Path) -> tuple[str, bytes, str]:
-    # Suffixes are validated upstream, so a miss here would be a defect rather
-    # than caller input; octet-stream makes the API say so instead of guessing.
-    mime = MIME_BY_SUFFIX.get(path.suffix.lower(), "application/octet-stream")
-    return (path.name, path.read_bytes(), mime)
+    return (path.name, path.read_bytes(), mime_for(path.suffix))
 
 
 def _payloads(response: Any) -> list[ImagePayload]:

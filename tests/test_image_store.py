@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from conftest import FAKE_JPEG_BYTES, FAKE_PNG_BYTES, FAKE_WEBP_BYTES
 
-from gpt_image_mcp.domain.errors import ImageDecodeError
+from gpt_image_mcp.domain.errors import ImageDecodeError, ImageStorageError
 from gpt_image_mcp.domain.image_store import ImageStore
 from gpt_image_mcp.domain.results import ImagePayload
 
@@ -67,3 +67,21 @@ def test_image_store_save_twice_never_overwrites(tmp_path: Path) -> None:
 
     assert first.path != second.path
     assert len(list((tmp_path / "images").iterdir())) == 2
+
+
+def test_store_reports_a_write_failure_as_a_domain_error(tmp_path: Path) -> None:
+    """A read-only output directory must not surface as a masked internal error.
+
+    The image is already paid for by the time it reaches the disk, so the caller
+    deserves to know which directory refused it.
+    """
+    blocked = tmp_path / "blocked"
+    blocked.mkdir()
+    blocked.chmod(0o500)
+    store = ImageStore(blocked / "images")
+
+    try:
+        with pytest.raises(ImageStorageError, match="could not be written"):
+            store.save(ImagePayload(b64=base64.b64encode(FAKE_PNG_BYTES).decode()), "a cat")
+    finally:
+        blocked.chmod(0o700)

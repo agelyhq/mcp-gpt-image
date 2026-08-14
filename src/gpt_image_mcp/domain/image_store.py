@@ -8,7 +8,7 @@ import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from gpt_image_mcp.domain.errors import ImageDecodeError
+from gpt_image_mcp.domain.errors import ImageDecodeError, ImageStorageError
 from gpt_image_mcp.domain.results import ImageResult
 
 if TYPE_CHECKING:
@@ -45,6 +45,7 @@ class ImageStore:
 
         Raises:
             ImageDecodeError: the payload is not valid base64, or not a known image.
+            ImageStorageError: the output directory refused the write.
         """
         try:
             data = base64.b64decode(payload.b64, validate=True)
@@ -52,9 +53,18 @@ class ImageStore:
             raise ImageDecodeError("The API returned a payload that is not valid base64") from exc
 
         output_format = self.sniff_format(data)
-        self._output_dir.mkdir(parents=True, exist_ok=True)
         path = self._output_dir / f"{_timestamp()}_{_slugify(prompt)}_{index}.{output_format}"
-        path.write_bytes(data)
+
+        try:
+            self._output_dir.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        except OSError as exc:
+            # The image is already paid for at this point, so the caller deserves
+            # to know it was the disk rather than a masked internal error.
+            raise ImageStorageError(
+                f"The image could not be written to {self._output_dir}: {exc}. "
+                "Check GPT_IMAGE_OUTPUT_DIR is writable and has room."
+            ) from exc
 
         return ImageResult(
             path=str(path.resolve()),
