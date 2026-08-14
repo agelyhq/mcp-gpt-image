@@ -89,6 +89,16 @@ class FakeSdk:
         self.client.images.edit = AsyncMock(side_effect=self._edit)
         self.client.responses.create = AsyncMock(side_effect=self._respond)
 
+        # Each adapter narrows the shared client to its own timeout. The real SDK
+        # returns a view sharing the transport; the fake returns itself so calls
+        # keep landing in the same recorders.
+        self.timeouts: list[Any] = []
+        self.client.with_options = self._with_options
+
+    def _with_options(self, **kwargs: Any) -> MagicMock:
+        self.timeouts.append(kwargs.get("timeout"))
+        return self.client
+
     @property
     def b64(self) -> str:
         if self.b64_override is not None:

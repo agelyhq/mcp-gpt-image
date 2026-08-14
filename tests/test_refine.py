@@ -8,14 +8,15 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from conftest import error_text, payloads, sdk_error
+from fastmcp import Client
 from openai import BadRequestError, NotFoundError
+
+from gpt_image_mcp.config import Settings
+from gpt_image_mcp.domain.types import ORCHESTRATOR_MODEL
+from gpt_image_mcp.server import create_server
 
 if TYPE_CHECKING:
     from conftest import FakeSdk
-    from fastmcp import Client
-
-# The reasoning model driving the image_generation tool, not the image model.
-ORCHESTRATOR_MODEL = "gpt-5.6"
 
 
 async def _start_session(client: Client, instruction: str = "draw a lighthouse") -> str:
@@ -35,6 +36,22 @@ async def test_refine_first_turn_opens_a_session(client: Client, fake_sdk: FakeS
     assert sent["model"] == ORCHESTRATOR_MODEL
     assert sent["tools"] == [{"type": "image_generation"}]
     assert "previous_response_id" not in sent
+
+
+async def test_refine_honours_a_pinned_orchestrator_model(
+    output_dir: Path, fake_sdk: FakeSdk
+) -> None:
+    """GPT_IMAGE_REFINE_MODEL must reach the API, since the default alias can drift."""
+    pinned = Settings(
+        openai_api_key="sk-test-key",
+        gpt_image_output_dir=str(output_dir),
+        gpt_image_refine_model="gpt-5.6-luna",
+    )  # type: ignore[call-arg]
+
+    async with Client(create_server(pinned, sdk=fake_sdk.client)) as client:
+        await client.call_tool("refine_image", {"instruction": "draw a lighthouse"})
+
+    assert fake_sdk.responses_calls[0]["model"] == "gpt-5.6-luna"
 
 
 async def test_refine_first_turn_embeds_seed_images(
@@ -181,3 +198,29 @@ async def test_refine_answer_without_an_image_asks_for_a_rephrase(
     assert result.is_error
     assert "Phrase the instruction" in error_text(result)
     assert list(output_dir.glob("*")) == []
+
+
+async def test_refine_rejects_images_on_a_running_session(
+    client: Client, fake_sdk: FakeSdk, sample_png: Path
+) -> None:
+    """Passing both is a mistake worth naming, not something to silently drop.
+
+    Ignoring the files would return a plausible image built from none of them,
+    which reads as success.
+    """
+    async with client:
+        session = await _start_session(client)
+        result = await client.call_tool(
+            "refine_image",
+            {
+                "instruction": "add a boat",
+                "session_id": session,
+                "image_paths": [str(sample_png)],
+            },
+            raise_on_error=False,
+        )
+
+    assert result.is_error
+    assert "cannot be combined" in error_text(result)
+    # The first turn is the only call that reached the API.
+    assert len(fake_sdk.responses_calls) == 1

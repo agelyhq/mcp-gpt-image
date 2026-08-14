@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from conftest import FAKE_JPEG_BYTES, error_text, payloads, sdk_error
-from openai import BadRequestError, RateLimitError
+from openai import BadRequestError, NotFoundError, RateLimitError
 
 if TYPE_CHECKING:
     from conftest import FakeSdk
@@ -199,3 +199,18 @@ async def test_generate_low_moderation_is_forwarded(client: Client, fake_sdk: Fa
         )
 
     assert fake_sdk.generate_calls[0]["moderation"] == "low"
+
+
+async def test_generate_unknown_model_surfaces_the_api_status(
+    client: Client, fake_sdk: FakeSdk
+) -> None:
+    """A wrong GPT_IMAGE_MODEL comes back as a 404, which used to escape untranslated."""
+    fake_sdk.error = sdk_error(NotFoundError, "The model 'gpt-image-9' does not exist", 404)
+
+    async with client:
+        result = await client.call_tool("generate_image", {"prompt": "a cat"}, raise_on_error=False)
+
+    assert result.is_error
+    message = error_text(result)
+    assert "404" in message
+    assert "gpt-image-9" in message
