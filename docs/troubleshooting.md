@@ -42,19 +42,22 @@ trip that was always going to fail.
 { "path": ".../20260814_142233_051182_a_lighthouse_1.png", "output_format": "png" }
 ```
 
-**Deliberate.** The API sometimes answers a webp request with PNG bytes. This server identifies
-the image from its magic bytes and names the file after what actually arrived, rather than after
-what was requested. The alternative is a file called `.webp` containing PNG data, which breaks
-the next program that opens it and does so far away from the cause.
+**Deliberate, and rarer than it used to be.** The API answered webp requests with PNG bytes for
+a period, which is what this entry was written for. Checked against the live API in August 2026,
+a webp request now returns genuine WEBP and the file is saved as `.webp`, so you should not
+normally see the mismatch above. If you do, it is the server reporting honestly rather than
+misbehaving: it identifies the image from its magic bytes and names the file after what actually
+arrived. The alternative is a file called `.webp` containing PNG data, which breaks the next
+program that opens it and does so far away from the cause.
 
 **What to check, in order.**
 
 1. Read `output_format` from the result rather than assuming it matches your request. It always
-   describes the bytes on disk.
+   describes the bytes on disk, and it is the authoritative answer.
 2. Look at the path in the result rather than reconstructing one from the prompt and the format
-   you asked for. Reconstructed paths are where this actually hurts.
+   you asked for. Reconstructed paths are where this actually hurts, and they break silently.
 3. If you need a guaranteed format, convert after the fact. Nothing in this server can force the
-   API to honour the request.
+   API to honour the request, so a pipeline that must have webp should convert rather than trust.
 
 **Read more.** [tools.md](tools.md), the results section.
 
@@ -109,6 +112,26 @@ id that cannot possibly be an OpenAI response id is not worth a round trip. Real
 **What it usually is.** An agent inventing a plausible-looking id rather than reusing the one
 from the previous result. Pass the exact string from the last `refine_image` response, or omit
 the parameter entirely to start again.
+
+## image_paths cannot be combined with session_id
+
+**What you see.**
+
+```
+image_paths cannot be combined with session_id: the session already holds the image being
+refined. Omit session_id to start a new session from these files, or omit image_paths to keep
+refining the current one.
+```
+
+**A local check.** The two parameters name two different starting points, and only one of them
+can be the picture you get. Earlier versions dropped the files and refined the session, which
+was worse than it sounds: you received a plausible image built from none of the files you
+supplied, and nothing said so.
+
+**What it usually is.** An agent holding on to `image_paths` from the first turn while adding
+the `session_id` it got back, sending both on turn two out of habit. Turn two needs the
+instruction and the id, nothing else. If you do want to start over from a file, that is the
+other branch: drop `session_id`, keep `image_paths`.
 
 ## OpenAI refused the credentials
 

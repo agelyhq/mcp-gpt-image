@@ -11,17 +11,20 @@ generates a picture, feeds the returned path back in, and keeps correcting it.
 Three layers, dependencies pointing inward only.
 
 - **Domain** (`domain/`): `types.py` holds every Literal alias and constant that
-  mirrors an API constraint; `results.py` the data carried between layers;
-  `image_store.py` the only module that writes files; `errors.py` the exception
-  hierarchy. Imports neither `openai` nor `fastmcp`.
+  mirrors an API constraint; `constraints.py` the rules those constants enforce;
+  `results.py` the data carried between layers; `image_store.py` the only module
+  that writes files; `errors.py` the exception hierarchy. Imports neither `openai`
+  nor `fastmcp`.
 - **Adapters** (`adapters/`): `images_client.py` for `/v1/images`,
   `responses_client.py` for the Responses API image tool, `_errors.py` for the
   single translation from SDK exceptions to domain errors. The only modules that
-  call the OpenAI SDK. `server.py` names `AsyncOpenAI` too, but for a type
-  annotation on the injection seam, never to make a call.
-- **Tools** (`tools/`): one file per MCP tool, plus `_base.py` (dependency bundle
-  and the error decorator) and `_validation.py`.
-- **Composition root**: `server.py`. Nothing else builds a client or a store.
+  call the OpenAI SDK.
+- **Tools** (`tools/`): one file per MCP tool, plus `_errors.py`, which turns a
+  domain error into a `ToolError`.
+- **Composition root**: `server.py`. It builds the one `AsyncOpenAI` client both
+  adapters share, and `deps.py` carries the bundle it hands to the tools. That
+  bundle sits outside `tools/` because anything inside that package without a
+  leading underscore is picked up as a tool.
 
 ## Key conventions
 
@@ -31,20 +34,25 @@ Three layers, dependencies pointing inward only.
   file; helpers must be underscore-prefixed or they will be treated as tools.
 - **The schema is the validation.** `Literal` aliases and `Field(ge=, le=)`
   become enums and bounds in the MCP tool schema, so the client is refused before
-  a call is billed. `_validation.py` only holds what JSON Schema cannot express:
-  parsing a free-form size, and touching the filesystem.
+  a call is billed. `domain/constraints.py` only holds what JSON Schema cannot
+  express: parsing a free-form size, and touching the filesystem.
 - **File paths as the interface.** Tools return paths, never bytes. An image never
   enters the conversation, so passing it between tools costs nothing.
 - **The extension follows the bytes.** `ImageStore.sniff_format` reads the magic
-  bytes and names the file after what actually arrived. The API sometimes answers a
-  webp request with PNG, and a `.webp` file holding PNG bytes breaks the next tool
-  that opens it.
-- **Errors surface as `ToolError`.** The `reports_errors` decorator in
-  `tools/_base.py` converts domain and validation errors. FastMCP passes the
-  message through untouched, which is what lets a calling agent fix its own call.
-  Anything unlisted crashes on purpose.
+  bytes and names the file after what actually arrived. The API used to answer webp
+  requests with PNG, and a `.webp` file holding PNG bytes breaks the next tool that
+  opens it. Measured on 2026-08-14: webp now comes back as real webp, so this is
+  insurance against a regression rather than a workaround for a live bug.
+- **Errors surface as `ToolError`.** The `as_tool_errors` decorator in
+  `tools/_errors.py` catches `ImageError` and nothing else, so a defect in this
+  server crashes instead of being dressed up as something the caller did wrong.
+  FastMCP passes the message through untouched, which is what lets a calling agent
+  fix its own call. `translate_sdk_error` is total for the same reason: it always
+  returns an error to raise, so no SDK exception can cross the adapter boundary.
 - **Async all the way.** `AsyncOpenAI`, awaited directly. There is no
-  `asyncio.to_thread` wrapper any more.
+  `asyncio.to_thread` wrapper any more. One client is shared; each adapter narrows
+  it with `with_options(timeout=...)`, which keeps a single connection pool while
+  letting image calls and refinement calls have different budgets.
 
 ## What gpt-image-2 refuses
 
@@ -58,10 +66,20 @@ Learned the hard way, do not reintroduce:
 - Inside the Responses `image_generation` tool object, only `quality` is confirmed
   as a configuration key. Framing and format live on the other two tools.
 
+`revised_prompt` is always `null` on `generate_image` and `edit_image`, and always
+populated on `refine_image`, which is a Responses API property rather than an
+oversight. Both were measured against the live API on 2026-08-14.
+
 The model id is the single point of change: `MODEL` in `domain/types.py`, or the
 `GPT_IMAGE_MODEL` variable to pin the `gpt-image-2-2026-04-21` snapshot.
-`ORCHESTRATOR_MODEL` (`gpt-5.6`) is the mainline model driving `refine_image`; an
-image model cannot be the primary model of a Responses call.
+
+`refine_image` runs on a second, mainline chat model, because an image model cannot
+be the primary model of a Responses call. It defaults to `ORCHESTRATOR_MODEL`,
+`chat-latest`, the one alias that never needs bumping, and `GPT_IMAGE_REFINE_MODEL`
+pins an exact id when the moving alias drifts. Verified accepted on 2026-08-14:
+`chat-latest`, `gpt-5.6` (resolves to `gpt-5.6-sol`), `gpt-5.6-sol`, `-terra`,
+`-luna`. Note `/v1/models` is not authoritative here: it omits `gpt-5.6`, which
+works, and lists `gpt-5.3-chat-latest`, which 404s.
 
 ## Commands
 

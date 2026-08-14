@@ -12,6 +12,7 @@ environment, so the table below is the complete list.
 | `OPENAI_API_KEY` | yes | none | Your OpenAI key. It keeps its standard name rather than a prefixed one, so a machine already set up for OpenAI needs nothing new. |
 | `GPT_IMAGE_OUTPUT_DIR` | no | `./generated-images` | Directory where images are written. Created on the first save, parents included. |
 | `GPT_IMAGE_MODEL` | no | `gpt-image-2` | The image model id. Only gpt-image-2 ids belong here. |
+| `GPT_IMAGE_REFINE_MODEL` | no | `chat-latest` | The mainline chat model that drives `refine_image`. A chat model id, never an image model id. See [The refinement model](#the-refinement-model). |
 | `GPT_IMAGE_TIMEOUT` | no | `300` | Seconds before an Images API call is abandoned. Covers `generate_image` and `edit_image`. |
 | `GPT_IMAGE_REFINE_TIMEOUT` | no | `300` | The same, for the Responses API call behind `refine_image`. |
 
@@ -87,9 +88,41 @@ no `model` parameter for a caller to override per call. Setting an id from anoth
 gets you an error from OpenAI, not a fallback.
 
 `refine_image` is the exception, and it ignores this variable entirely. It runs on the Responses
-API with the built-in image tool, driven by the mainline model `gpt-5.6`, which is fixed in the
-code and not configurable. An image model cannot be the primary model of a Responses call, so
-there is no version of this where the two share a setting.
+API with the built-in image tool, and the model in front of that tool is a mainline chat model
+rather than an image one. An image model cannot be the primary model of a Responses call, so
+there is no version of this where the two share a setting. That model has its own variable,
+below.
+
+## The refinement model
+
+`GPT_IMAGE_REFINE_MODEL` names the chat model that steers `refine_image`. It defaults to
+`chat-latest`.
+
+That default is chosen for one property: it is the only alias that never goes stale. A
+generation alias has to be bumped by hand every time OpenAI ships a new line, and `gpt-5.6` is
+not even listed in `/v1/models`, though it resolves to `gpt-5.6-sol` when you call it. Pointing
+at the moving alias means a new mainline model arrives without an upgrade here. The price of
+that is real, and it is why the variable exists: a moving alias can change behaviour without
+warning, on a day you did not choose.
+
+These values were verified against the live API in August 2026, and all of them accept the
+built-in `image_generation` tool:
+
+| Value | Notes |
+|---|---|
+| `chat-latest` | The default. Always the current mainline model, whichever that is. |
+| `gpt-5.6` | The generation alias. Resolves to `gpt-5.6-sol`, and is absent from `/v1/models`. |
+| `gpt-5.6-sol` | What `gpt-5.6` actually runs. Pin this to hold that behaviour still. |
+| `gpt-5.6-terra` | The same line, a different point on the cost and quality curve. |
+| `gpt-5.6-luna` | The cheap tier of the line. Worth trying when refinement turns dominate the bill. |
+
+Pin one of them when the default drifts under you and you need yesterday's behaviour back, or
+when you would rather pay less per turn than have the best available reasoning in front of the
+drawing. Leave it alone otherwise. A pin is a decision to revisit, because the pinned ids retire
+too. [refinement.md](refinement.md) covers when the trade is worth making.
+
+Setting an image model id here does not work. The two models sit on different endpoints and
+`GPT_IMAGE_MODEL` is the one that takes gpt-image-2 ids.
 
 ## Timeouts
 
@@ -122,6 +155,7 @@ rather than the budget.
         "OPENAI_API_KEY": "sk-...",
         "GPT_IMAGE_OUTPUT_DIR": "/home/you/images",
         "GPT_IMAGE_MODEL": "gpt-image-2-2026-04-21",
+        "GPT_IMAGE_REFINE_MODEL": "gpt-5.6-sol",
         "GPT_IMAGE_TIMEOUT": "300",
         "GPT_IMAGE_REFINE_TIMEOUT": "420"
       }

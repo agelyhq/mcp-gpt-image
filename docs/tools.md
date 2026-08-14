@@ -79,7 +79,7 @@ Refines an image over several turns, keeping the thread with the model.
 |---|---|---|---|---|
 | `instruction` | string | up to 32,000 characters | required | What to draw, or what to change since the last turn. |
 | `session_id` | string or null | an id from a previous call | `null` | Continues that session. Omit it to start a new one. Must start with `resp_`. |
-| `image_paths` | list of strings or null | 1 to 16 paths | `null` | Local images to start the session from. **Ignored when `session_id` is given**, because the session already holds the image. |
+| `image_paths` | list of strings or null | 1 to 16 paths | `null` | Local images to start the session from. **Rejected when `session_id` is given**, because the session already holds the image and the two describe different starting points. |
 | `quality` | string | `auto`, `low`, `medium`, `high` | `auto` | Only sent when it is not `auto`, so `auto` means "let the model decide" rather than a value on the wire. |
 
 Returns a **single object**, not a list. There is no `n`: a conversation refines one image.
@@ -139,14 +139,22 @@ extra field.
 |---|---|---|---|
 | `path` | string | all three | Absolute path to the saved file. Valid input to any tool here. |
 | `output_format` | string | all three | `png`, `jpeg` or `webp`: what the bytes on disk actually are. |
-| `revised_prompt` | string or null | all three | The prompt the model rewrote for itself, when the API supplies one. Often `null`. |
+| `revised_prompt` | string or null | all three | The prompt the model rewrote for itself. Always `null` on `generate_image` and `edit_image`, always populated on `refine_image`. |
 | `session_id` | string | `refine_image` | The OpenAI response id to pass to the next turn. |
 
-**`output_format` describes the file, not the request.** The API has been known to answer a webp
-request with PNG bytes. Naming the file `.webp` anyway would produce a file that lies about its
-own contents and breaks the next program that opens it, so the server reads the magic bytes of
-what arrived and names the file after that. Read `output_format` from the result and you will
-always be right; assume it matches your request and you will occasionally be wrong.
+**Only `refine_image` fills in `revised_prompt`.** The Images API returns no rewritten prompt on
+gpt-image-2, so the field is `null` on every `generate_image` and `edit_image` result and there
+is nothing to read there. The Responses API behind `refine_image` does return one, a full
+rewrite of your instruction in the model's own words, and that is a genuine reason to prefer
+refinement when you want to see how you were understood rather than infer it from the picture.
+
+**`output_format` describes the file, not the request.** The API answered webp requests with PNG
+bytes for a period; measured in August 2026 it no longer does, and a webp request comes back as
+real WEBP saved to a `.webp` file. The server nonetheless reads the magic bytes of what arrived
+and names the file after them, because naming a file `.webp` on the strength of the request
+would let an upstream regression put PNG data behind a `.webp` extension and break the next
+program that opens it. So `output_format` in the result is authoritative: read it and you will
+always be right, assume it matches your request and you are trusting the API to stay fixed.
 
 Files are written into `GPT_IMAGE_OUTPUT_DIR`, created on first use, and named
 `{YYYYMMDD_HHMMSS_ffffff}_{prompt slug}_{index}.{ext}`. The timestamp is UTC with microsecond
@@ -170,6 +178,7 @@ image that exists.
 | `The model answered without producing an image` | The reasoning model replied in text instead of drawing. | Phrase the instruction as an explicit request to draw. |
 | `Invalid size ...` | Local validation, before any request. | The message names the rule. See [Sizes](#sizes). |
 | `Image file not found:` | A path in `image_paths` or `mask_path` does not exist. | Use the absolute paths the tools return. |
+| `image_paths cannot be combined with session_id` | Local validation. Both parameters were given to `refine_image`, and they name different starting points. | Drop `session_id` to start from those files, or drop `image_paths` to keep refining the session. |
 
 Every one of these is worked through, with the full symptom, in
 [troubleshooting.md](troubleshooting.md).

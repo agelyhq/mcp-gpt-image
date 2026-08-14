@@ -146,9 +146,14 @@ This returns one object rather than a list, and it carries a session id:
   "path": "/home/you/images/20260814_143010_774219_make_the_sea_rougher_1.png",
   "session_id": "resp_0a1b2c3d4e5f60718293a4b5c6d7e8f9",
   "output_format": "png",
-  "revised_prompt": null
+  "revised_prompt": "Edit the provided image: keep the lighthouse, the headland and the storm exactly as they are, and raise the sea state, with taller breaking waves and heavier spray against the rocks..."
 }
 ```
+
+Note the `revised_prompt`. It was `null` on the generation above and it is filled in here,
+because only `refine_image` gets one back from the API. It is how the model restated your
+instruction to itself, and it is the cheapest way to find out that "rougher" was read as
+something you did not mean.
 
 Keep that id. The next correction is one line, with no image attached and no prompt rewritten:
 
@@ -167,10 +172,11 @@ what to do when a session expires are in [refinement.md](refinement.md).
 **Pass paths, never bytes.** The whole design rests on it. A path costs a handful of tokens and
 is valid input to every tool here.
 
-**Read `output_format` from the result.** Not from your request. The API sometimes answers a
-webp request with PNG bytes, and this server names files after what actually arrived rather than
-after what was asked. That is the deliberate behaviour, and
-[troubleshooting.md](troubleshooting.md) explains why the opposite would be worse.
+**Read `output_format` from the result.** Not from your request. The API answered webp requests
+with PNG bytes for a while, and although it no longer does as of August 2026, this server still
+names files after the bytes that actually arrived rather than after what was asked. The result
+is the authoritative answer either way, and [troubleshooting.md](troubleshooting.md) explains
+why the opposite would be worse.
 
 **Do not ask for a transparent background.** gpt-image-2 has none. `background` accepts `auto`
 and `opaque` only, and the schema will reject anything else before OpenAI charges you for

@@ -113,7 +113,9 @@ lettering survive without a setting to find and switch on.
 **🔁 Refine over several turns.** `refine_image` runs through the Responses API with a
 reasoning model steering the drawing, and returns a `session_id`. Pass that id back and the
 conversation continues: the model remembers the image and the instructions that shaped it,
-so corrections read like corrections. Sessions live about 30 days.
+so corrections read like corrections. Sessions live about 30 days. It is also the only tool
+here that fills in `revised_prompt`, so you can read back how your instruction was understood
+before you spend another turn guessing.
 See [docs/refinement.md](docs/refinement.md).
 
 **📁 Paths in, paths out.** Every tool returns `{path, output_format, revised_prompt}` with an
@@ -138,11 +140,14 @@ and the schema rejects anything else before a request is billed. This is a real 
 against the previous generation: if your pipeline cut out a subject on transparency, that
 pipeline needs a mask or an external background remover now.
 
-**A webp request can come back as a PNG.** The API does this occasionally, and a file named
-`.webp` holding PNG bytes breaks whatever opens it next. So the server sniffs the magic bytes
-of what actually arrived and names the file after that. The consequence is deliberate and you
-should code for it: `output_format` in the result describes the bytes on disk, and it can
-differ from the `output_format` you asked for. Trust the result, not the request.
+**A webp request used to come back as a PNG.** The API did that for a while, and a file named
+`.webp` holding PNG bytes breaks whatever opens it next. Measured in August 2026, it no longer
+does: a webp request returns genuine WEBP bytes and the file is saved as `.webp`. The server
+still sniffs the magic bytes of what actually arrived and names the file after them, because a
+regression upstream must never be able to produce a file whose extension lies about its own
+contents. Code for it anyway: `output_format` in the result is authoritative, it describes the
+bytes on disk, and it may differ from the `output_format` you asked for. Trust the result, not
+the request.
 
 **Refinement costs more per image.** A reasoning model drives `refine_image`, and you pay for
 it on every turn including the first. For a single picture, `generate_image` is cheaper and
@@ -170,6 +175,10 @@ What you can pin is the snapshot. `GPT_IMAGE_MODEL=gpt-image-2-2026-04-21` freez
 on the release of 2026-04-21, which is what you want when a silent model update would change
 output you have already shipped.
 
+The chat model that steers `refine_image` is a separate decision under a separate variable,
+`GPT_IMAGE_REFINE_MODEL`, because it is not an image model at all and cannot share a setting
+with one.
+
 ## ⚙️ Configuration
 
 Everything is environment variables, set in your MCP client's config. There is no config
@@ -181,6 +190,7 @@ complete. A `.env` in the working directory is read too.
 | `OPENAI_API_KEY` | yes | none | Standard OpenAI key, reused under its usual name so an existing setup works untouched. |
 | `GPT_IMAGE_OUTPUT_DIR` | no | `./generated-images` | Where images are written. Created on first save. Relative paths resolve against the server's working directory, so an absolute path is safer. |
 | `GPT_IMAGE_MODEL` | no | `gpt-image-2` | The image model. Set it to `gpt-image-2-2026-04-21` to pin the snapshot. |
+| `GPT_IMAGE_REFINE_MODEL` | no | `chat-latest` | The mainline chat model that steers `refine_image`. The default alias never goes stale; pin `gpt-5.6-sol`, `gpt-5.6-terra` or `gpt-5.6-luna` to hold behaviour still or to trade cost against quality. |
 | `GPT_IMAGE_TIMEOUT` | no | `300` | Seconds before `generate_image` or `edit_image` gives up. Complex prompts and 4K sizes sit near the top of that budget. |
 | `GPT_IMAGE_REFINE_TIMEOUT` | no | `300` | The same, for `refine_image`, which is slower because it plans before it draws. |
 

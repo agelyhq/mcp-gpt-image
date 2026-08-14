@@ -4,6 +4,51 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.0 - 2026-08-14
+
+One setting, on the model that steers `refine_image`. Nothing in the tool surface changes: the
+three tools take the same parameters and return the same fields, and no client config has to be
+touched for this release to work. It is still a behaviour change for anyone who was relying on
+the model that used to be hardcoded, which is exactly why the new variable exists.
+
+### Added
+
+- **`GPT_IMAGE_REFINE_MODEL`, the chat model behind `refine_image`.** The model in front of the
+  built-in image tool was fixed in the code, so a caller who wanted different behaviour or a
+  different price per turn had no way to ask for it. It is now an environment variable like the
+  rest. Verified against the live API in August 2026, `chat-latest`, `gpt-5.6`, `gpt-5.6-sol`,
+  `gpt-5.6-terra` and `gpt-5.6-luna` all work and all accept the `image_generation` tool, with
+  `gpt-5.6-luna` the cheap tier of that line. Note that `gpt-5.6` is not listed in `/v1/models`
+  even though it resolves to `gpt-5.6-sol` when called, so pinning the concrete id is the more
+  predictable choice.
+
+### Changed
+
+- **The refinement model defaults to `chat-latest` instead of `gpt-5.6`.** A generation alias has
+  to be bumped by hand every time OpenAI ships a new line, and a default that needs manual
+  maintenance is a default that is wrong for months at a time. `chat-latest` is the only alias
+  that never goes stale, so a new mainline model reaches `refine_image` without a release here.
+  The cost of that is real and it is the reason the setting above ships in the same version: a
+  moving alias can change behaviour without warning, and pinning `gpt-5.6-sol` puts you back on
+  the concrete model that `gpt-5.6` was resolving to.
+- **`refine_image` refuses `image_paths` and `session_id` together instead of ignoring the
+  files.** The two describe different starting points, and quietly dropping one returned a
+  plausible image built from none of the files that were supplied, which reads as success. The
+  error names the parameter to drop.
+
+### Fixed
+
+- **Failures that used to escape as raw SDK exceptions.** The function translating OpenAI errors
+  re-raised anything it did not recognise, so a 404 from a mistyped `GPT_IMAGE_MODEL`, a 409 or a
+  422 crossed the adapter boundary untranslated and surfaced without a usable message. It now
+  always returns a domain error, and status codes it has no specific wording for are reported
+  with the code and the API's own text.
+- **The configured timeouts are now actually applied.** Both adapters share one HTTP client, and
+  each narrows it to its own budget, so `GPT_IMAGE_REFINE_TIMEOUT` no longer sits unused while
+  refinement runs on the image timeout. There is still a single connection pool.
+- **`OPENAI_API_KEY` is held as a secret.** It was a plain string on the settings object, so any
+  incidental `repr()` of that object, in a log line or a traceback, printed the key.
+
 ## 0.2.0 - 2026-08-14
 
 A breaking release, top to bottom. The package has a new name, a new import path, one supported

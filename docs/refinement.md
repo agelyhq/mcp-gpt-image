@@ -12,8 +12,10 @@ turn one is a description and turn two is "make the sky darker".
 
 `generate_image` and `edit_image` go through the Images API, which forgets everything between
 calls. `refine_image` goes through the Responses API instead, using OpenAI's built-in
-`image_generation` tool, driven by the mainline model `gpt-5.6`. An image model cannot be the
-primary model of a Responses call, so a reasoning model sits in front and decides what to draw.
+`image_generation` tool, driven by a mainline chat model, `chat-latest` unless you say
+otherwise. An image model cannot be the primary model of a Responses call, so a reasoning model
+sits in front and decides what to draw. Which one is a setting, see
+[Pinning the refinement model](#pinning-the-refinement-model).
 
 That is where the memory comes from. The Responses API keeps the conversation on OpenAI's side
 and hands you an id for it. Passing that id on the next call continues the same thread: the
@@ -35,9 +37,11 @@ id, not something this server invents.
 the head of the conversation; passing an older id branches from an older state, which is
 occasionally useful and usually a mistake.
 
-**`image_paths` is ignored when `session_id` is given.** The session already holds the image,
-so sending it again would be paying twice for the same picture. The parameter is not an error
-in that position, it simply has no effect.
+**`image_paths` cannot be combined with `session_id`.** The session already holds the image, so
+the two together describe two different starting points and only one of them can win. Rather
+than pick one and hand back a picture built from files you supplied and it never opened, the
+tool refuses the call and tells you which parameter to drop: omit `session_id` to start fresh
+from those files, or omit `image_paths` to keep refining the current image.
 
 **Sessions last about 30 days.** After that the id is gone and the tool says so. Recovery is
 cheap, see [When a session expires](#when-a-session-expires).
@@ -64,9 +68,14 @@ refine_image(
   "path": "/home/you/images/20260814_142233_051182_a_wide_cinematic_banner_a_lighthous_1.png",
   "session_id": "resp_0a1b2c3d4e5f60718293a4b5c6d7e8f9",
   "output_format": "png",
-  "revised_prompt": null
+  "revised_prompt": "A wide cinematic banner: a lighthouse standing on a rocky headland at dusk, heavy storm clouds massing above it, waves breaking hard against the rocks at its base, muted blue palette throughout..."
 }
 ```
+
+`revised_prompt` comes back filled in here, which it does not on `generate_image` or
+`edit_image`. It is the model's own rewrite of what you asked for, and it is worth reading on
+turn one: if the rewrite has already lost something you cared about, the picture will have lost
+it too, and you know that before spending a second turn.
 
 **Turn 2.** Look at it, then say what is wrong. Nothing about the lighthouse, the palette or the
 storm needs repeating.
@@ -83,7 +92,7 @@ refine_image(
   "path": "/home/you/images/20260814_142811_339045_make_the_sea_rougher_and_the_waves_1.png",
   "session_id": "resp_1b2c3d4e5f60718293a4b5c6d7e8f9a0",
   "output_format": "png",
-  "revised_prompt": null
+  "revised_prompt": "Edit the provided image: keep the lighthouse, the headland and the dusk palette exactly as they are, and raise the sea state, with taller breaking waves and heavier spray against the rocks..."
 }
 ```
 
@@ -151,6 +160,28 @@ per project, and do not route everything through refinement because it is the ne
 one final turn at `high` costs a fraction of running everything at `high`, and the composition
 decisions you are making early do not need the pixels.
 
+## Pinning the refinement model
+
+The model in front of the drawing is `chat-latest` by default, and `GPT_IMAGE_REFINE_MODEL`
+changes it. `chat-latest` is there because it is the only alias that never goes stale: a
+generation alias has to be bumped by hand every time OpenAI ships a new line, and `gpt-5.6` is
+not even listed in `/v1/models`, though it resolves to `gpt-5.6-sol` when called. The tradeoff
+is the obvious one, a moving alias can change behaviour without warning, and the variable is the
+escape hatch for the day it does.
+
+Verified against the live API in August 2026, all accepting the `image_generation` tool:
+`chat-latest`, `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna`.
+
+Pin one of them in two situations. The first is drift: refinement that behaved one way last
+month behaves differently today, on instructions you have not changed, and you want the old
+behaviour back while you work out what moved. `gpt-5.6-sol` is the concrete model behind the
+`gpt-5.6` alias and the natural place to land. The second is cost: `gpt-5.6-luna` is the cheap
+tier of that line, and on a workflow where refinement turns dominate the bill it is worth
+measuring against the default before assuming you need the best reasoning available.
+
+Everywhere else, leave it. The default is the version of this that needs no maintenance, and a
+pin is a decision you have to revisit, because pinned ids retire in their turn.
+
 ## When a session expires
 
 You will see:
@@ -199,4 +230,5 @@ what to change, in the imperative, and the tool call reliably draws.
 
 - [tools.md](tools.md), the exact parameters of all three tools
 - [troubleshooting.md](troubleshooting.md), organised by symptom
-- [configuration.md](configuration.md), including `GPT_IMAGE_REFINE_TIMEOUT`
+- [configuration.md](configuration.md), including `GPT_IMAGE_REFINE_MODEL` and
+  `GPT_IMAGE_REFINE_TIMEOUT`
