@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
-    from gpt_image_mcp.tools._base import ToolDeps
+    from gpt_image_mcp.deps import ToolDeps
 
 
 def register_all_tools(mcp: FastMCP, deps: ToolDeps) -> None:

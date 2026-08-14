@@ -6,38 +6,35 @@ from typing import TYPE_CHECKING, Annotated
 
 from pydantic import Field
 
+from gpt_image_mcp.domain.constraints import validate_input_images, validate_mask, validate_size
 from gpt_image_mcp.domain.results import ImageResult
 from gpt_image_mcp.domain.types import (
     MAX_EDIT_IMAGES,
     MAX_IMAGES_PER_CALL,
     MAX_PROMPT_CHARS,
+    SIZE_DESCRIPTION,
     Background,
     OutputFormat,
     Quality,
 )
-from gpt_image_mcp.tools._base import ToolDeps, reports_errors
-from gpt_image_mcp.tools._validation import validate_input_images, validate_mask, validate_size
+from gpt_image_mcp.tools._errors import as_tool_errors
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
-_SIZE_HELP = (
-    "'auto', a preset (1024x1024, 1536x1024, 1024x1536), or any WIDTHxHEIGHT with "
-    "both dimensions multiples of 16, an aspect ratio between 1:3 and 3:1, and a "
-    "maximum of 3840x2160."
-)
+    from gpt_image_mcp.deps import ToolDeps
 
 
 def register(mcp: FastMCP, deps: ToolDeps) -> None:
     """Register edit_image on the server."""
 
     @mcp.tool
-    @reports_errors
+    @as_tool_errors
     async def edit_image(
         prompt: Annotated[str, Field(max_length=MAX_PROMPT_CHARS)],
         image_paths: Annotated[list[str], Field(min_length=1, max_length=MAX_EDIT_IMAGES)],
         mask_path: str | None = None,
-        size: Annotated[str, Field(description=_SIZE_HELP)] = "auto",
+        size: Annotated[str, Field(description=SIZE_DESCRIPTION)] = "auto",
         quality: Quality = "auto",
         output_format: OutputFormat = "png",
         output_compression: Annotated[int, Field(ge=0, le=100)] = 100,
