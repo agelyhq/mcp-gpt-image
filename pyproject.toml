@@ -1,6 +1,6 @@
 [project]
 name = "mcp-gpt-image"
-version = "0.2.0"
+version = "0.3.0"
 description = "MCP server for image generation, editing and multi-turn refinement with OpenAI gpt-image-2"
 readme = "README.md"
 requires-python = ">=3.12"
