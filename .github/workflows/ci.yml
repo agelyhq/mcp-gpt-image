@@ -22,6 +22,9 @@ jobs:
       - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
+          # Both matrix jobs otherwise compute the same cache key and race to
+          # save it, which makes one of them warn on every run.
+          cache-suffix: py${{ matrix.python-version }}
 
       - name: Install
         run: uv sync --all-extras --python ${{ matrix.python-version }}
