@@ -1,119 +1,171 @@
-"""E2E tests for edit_image tool.
-
-Tests the full MCP lifecycle including iterative chaining: generate → edit → edit.
-"""
+"""Scenarios for edit_image, driven through the MCP client."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from conftest import FAKE_PNG_BYTES, error_text, make_pngs, payloads
+
 if TYPE_CHECKING:
+    from conftest import FakeSdk
     from fastmcp import Client
 
 
-async def test_edit_image(client: Client, clean_output_dir: Path, sample_image: Path):
-    """Edit an existing image and verify output."""
+async def test_edit_single_image_sends_one_upload_tuple(
+    client: Client, fake_sdk: FakeSdk, sample_png: Path
+) -> None:
+    async with client:
+        result = await client.call_tool(
+            "edit_image", {"prompt": "add a red border", "image_paths": [str(sample_png)]}
+        )
+
+    images = payloads(result)
+    assert len(images) == 1
+    assert Path(images[0]["path"]).is_file()
+
+    sent = fake_sdk.edit_calls[0]
+    assert isinstance(sent["image"], tuple)
+    assert sent["image"] == ("source.png", FAKE_PNG_BYTES, "image/png")
+
+
+async def test_edit_several_images_sends_a_list(
+    client: Client, fake_sdk: FakeSdk, tmp_path: Path
+) -> None:
+    paths = make_pngs(tmp_path, 3)
+
+    async with client:
+        result = await client.call_tool(
+            "edit_image", {"prompt": "combine these", "image_paths": paths}
+        )
+
+    assert not result.is_error
+    sent_images = fake_sdk.edit_calls[0]["image"]
+    assert isinstance(sent_images, list)
+    assert len(sent_images) == 3
+    assert [name for name, _, _ in sent_images] == ["input_0.png", "input_1.png", "input_2.png"]
+
+
+async def test_edit_too_many_images_is_rejected_by_schema(
+    client: Client, fake_sdk: FakeSdk
+) -> None:
+    async with client:
+        result = await client.call_tool(
+            "edit_image",
+            {"prompt": "combine these", "image_paths": [f"/tmp/x{i}.png" for i in range(17)]},
+            raise_on_error=False,
+        )
+
+    assert result.is_error
+    assert "image_paths" in error_text(result)
+    assert fake_sdk.edit_calls == []
+
+
+async def test_edit_missing_file_names_the_path(client: Client, fake_sdk: FakeSdk) -> None:
+    async with client:
+        result = await client.call_tool(
+            "edit_image",
+            {"prompt": "do something", "image_paths": ["/nonexistent/ghost.png"]},
+            raise_on_error=False,
+        )
+
+    assert result.is_error
+    assert "/nonexistent/ghost.png" in error_text(result)
+    assert fake_sdk.edit_calls == []
+
+
+async def test_edit_non_image_suffix_is_rejected(
+    client: Client, fake_sdk: FakeSdk, tmp_path: Path
+) -> None:
+    note = tmp_path / "note.txt"
+    note.write_text("this is not an image")
+
+    async with client:
+        result = await client.call_tool(
+            "edit_image",
+            {"prompt": "do something", "image_paths": [str(note)]},
+            raise_on_error=False,
+        )
+
+    assert result.is_error
+    assert "Unsupported image type '.txt'" in error_text(result)
+    assert fake_sdk.edit_calls == []
+
+
+async def test_edit_mask_is_forwarded(
+    client: Client, fake_sdk: FakeSdk, sample_png: Path, sample_mask: Path
+) -> None:
     async with client:
         result = await client.call_tool(
             "edit_image",
             {
-                "prompt": "Add a red border",
-                "image_paths": [str(sample_image)],
-                "quality": "low",
-                "size": "1024x1024",
+                "prompt": "repaint the sky",
+                "image_paths": [str(sample_png)],
+                "mask_path": str(sample_mask),
             },
         )
 
-    parsed = json.loads(result.content[0].text)
-    assert len(parsed) == 1
-    assert "path" in parsed[0]
-
-    edited_path = Path(parsed[0]["path"])
-    assert edited_path.exists()
-    assert edited_path != sample_image
-    assert edited_path.stat().st_size > 0
+    assert not result.is_error
+    assert fake_sdk.edit_calls[0]["mask"] == ("mask.png", FAKE_PNG_BYTES, "image/png")
 
 
-async def test_edit_with_high_fidelity(client: Client, clean_output_dir: Path, sample_image: Path):
-    """Edit with high input fidelity."""
+async def test_edit_missing_mask_is_rejected(
+    client: Client, fake_sdk: FakeSdk, sample_png: Path
+) -> None:
     async with client:
         result = await client.call_tool(
             "edit_image",
             {
-                "prompt": "Add a hat",
-                "image_paths": [str(sample_image)],
-                "input_fidelity": "high",
-                "quality": "low",
-                "size": "1024x1024",
+                "prompt": "repaint the sky",
+                "image_paths": [str(sample_png)],
+                "mask_path": "/nonexistent/mask.png",
             },
+            raise_on_error=False,
         )
 
-    parsed = json.loads(result.content[0].text)
-    assert len(parsed) == 1
-    assert Path(parsed[0]["path"]).exists()
+    assert result.is_error
+    assert "Mask file not found: /nonexistent/mask.png" in error_text(result)
+    assert fake_sdk.edit_calls == []
 
 
-async def test_iterative_workflow(client: Client, clean_output_dir: Path):
-    """Full iterative chain: generate → edit → edit again."""
-    async with client:
-        gen_result = await client.call_tool(
-            "generate_image",
-            {
-                "prompt": "A simple house drawing",
-                "quality": "low",
-                "size": "1024x1024",
-            },
-        )
-        v1_path = json.loads(gen_result.content[0].text)[0]["path"]
-        assert Path(v1_path).exists()
+async def test_edit_non_png_mask_is_rejected(
+    client: Client, fake_sdk: FakeSdk, sample_png: Path, tmp_path: Path
+) -> None:
+    mask = tmp_path / "mask.jpeg"
+    mask.write_bytes(FAKE_PNG_BYTES)
 
-        edit1_result = await client.call_tool(
-            "edit_image",
-            {
-                "prompt": "Add a garden",
-                "image_paths": [v1_path],
-                "quality": "low",
-                "size": "1024x1024",
-            },
-        )
-        v2_path = json.loads(edit1_result.content[0].text)[0]["path"]
-        assert Path(v2_path).exists()
-
-        edit2_result = await client.call_tool(
-            "edit_image",
-            {
-                "prompt": "Make sky sunset orange",
-                "image_paths": [v2_path],
-                "quality": "low",
-                "size": "1024x1024",
-            },
-        )
-
-    v3_parsed = json.loads(edit2_result.content[0].text)
-    v3_path = Path(v3_parsed[0]["path"])
-    assert v3_path.exists()
-
-    assert Path(v1_path).exists()
-    assert Path(v2_path).exists()
-    assert v3_path.exists()
-
-
-async def test_edit_nonexistent_file_returns_error(client: Client, clean_output_dir: Path):
-    """Editing a nonexistent file should return a validation error."""
     async with client:
         result = await client.call_tool(
             "edit_image",
             {
-                "prompt": "Do something",
-                "image_paths": ["/nonexistent/fake.png"],
-                "quality": "low",
-                "size": "1024x1024",
+                "prompt": "repaint the sky",
+                "image_paths": [str(sample_png)],
+                "mask_path": str(mask),
+            },
+            raise_on_error=False,
+        )
+
+    assert result.is_error
+    assert "must be a PNG" in error_text(result)
+    assert fake_sdk.edit_calls == []
+
+
+async def test_edit_never_sends_fidelity_or_moderation(
+    client: Client, fake_sdk: FakeSdk, sample_png: Path
+) -> None:
+    """gpt-image-2 is always high fidelity and its edit endpoint has no moderation key."""
+    async with client:
+        await client.call_tool(
+            "edit_image",
+            {
+                "prompt": "add a hat",
+                "image_paths": [str(sample_png)],
+                "quality": "high",
+                "background": "opaque",
             },
         )
 
-    parsed = json.loads(result.content[0].text)
-    assert len(parsed) == 1
-    assert "error" in parsed[0]
-    assert "Image file not found" in parsed[0]["error"]
+    sent = fake_sdk.edit_calls[0]
+    assert sent["model"] == "gpt-image-2"
+    assert "input_fidelity" not in sent
+    assert "moderation" not in sent
