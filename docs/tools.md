@@ -179,6 +179,7 @@ image that exists.
 | `Invalid size ...` | Local validation, before any request. | The message names the rule. See [Sizes](#sizes). |
 | `Image file not found:` | A path in `image_paths` or `mask_path` does not exist. | Use the absolute paths the tools return. |
 | `image_paths cannot be combined with session_id` | Local validation. Both parameters were given to `refine_image`, and they name different starting points. | Drop `session_id` to start from those files, or drop `image_paths` to keep refining the session. |
+| `The image could not be written to` | The output directory is read-only, missing or full. | Point `GPT_IMAGE_OUTPUT_DIR` at a writable directory. The message names the one that refused. |
 
 Every one of these is worked through, with the full symptom, in
 [troubleshooting.md](troubleshooting.md).

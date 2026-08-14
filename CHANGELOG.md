@@ -48,6 +48,14 @@ the model that used to be hardcoded, which is exactly why the new variable exist
   refinement runs on the image timeout. There is still a single connection pool.
 - **`OPENAI_API_KEY` is held as a secret.** It was a plain string on the settings object, so any
   incidental `repr()` of that object, in a log line or a traceback, printed the key.
+- **A size with a zero dimension crashed instead of being refused.** `0x1024` passed the
+  multiple-of-16 and maximum-size checks, then divided by zero computing the aspect ratio. The
+  result was a masked internal error with nothing the caller could act on, which is precisely
+  what the typed error boundary exists to prevent. It is now an ordinary invalid-size message.
+- **A directory that refuses the write is now reported as such.** A read-only or full output
+  directory raised an `OSError` that escaped the error boundary, so the caller saw a masked
+  failure after the image had already been paid for. The message names the directory and points
+  at `GPT_IMAGE_OUTPUT_DIR`.
 
 ## 0.2.0 - 2026-08-14
 
